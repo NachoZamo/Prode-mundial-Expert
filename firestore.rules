@@ -1,0 +1,226 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // 1. Global safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Common helpers
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isNumeric(val) {
+      return val is int || val is float;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        ('email' in request.auth.token && request.auth.token.email == 'ignaciozamorano@gmail.com') ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+         'role' in get(/databases/$(database)/documents/users/$(request.auth.uid)).data &&
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin')
+      );
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // Validation rules per entity type:
+    
+    // User validation
+    function isValidUser(data) {
+      return data.id is string && data.id.size() <= 128
+        && data.displayName is string && data.displayName.size() <= 100
+        && data.photoURL is string && data.photoURL.size() <= 2000
+        && data.email is string && data.email.size() <= 100
+        && isNumeric(data.globalPoints) && data.globalPoints >= 0
+        && isNumeric(data.globalExactScores) && data.globalExactScores >= 0
+        && isNumeric(data.globalCorrectOutcomes) && data.globalCorrectOutcomes >= 0
+        && data.role is string && (data.role == 'user' || data.role == 'admin');
+    }
+
+    // Match validation
+    function isValidMatch(data) {
+      return data.id is string && data.id.size() <= 128
+        && data.teamA is string && data.teamA.size() <= 100
+        && data.teamB is string && data.teamB.size() <= 100
+        && data.teamAFlag is string && data.teamAFlag.size() <= 10
+        && data.teamBFlag is string && data.teamBFlag.size() <= 10
+        && data.group is string && data.group.size() <= 50
+        && data.stadium is string && data.stadium.size() <= 200
+        && data.date is string && data.date.size() <= 50
+        && data.status is string && (data.status == 'scheduled' || data.status == 'live' || data.status == 'finished')
+        && (data.resultA == null || isNumeric(data.resultA))
+        && (data.resultB == null || isNumeric(data.resultB));
+    }
+
+    // Group validation
+    function isValidGroup(data) {
+      return data.id is string && data.id.size() <= 128
+        && data.name is string && data.name.size() <= 100
+        && data.code is string && data.code.size() <= 20
+        && data.creatorId is string && data.creatorId.size() <= 128
+        && data.creatorName is string && data.creatorName.size() <= 100;
+    }
+
+    // Group Member validation
+    function isValidGroupMember(data) {
+      return data.userId is string && data.userId.size() <= 128
+        && data.displayName is string && data.displayName.size() <= 100
+        && data.photoURL is string && data.photoURL.size() <= 2000
+        && isNumeric(data.points) && data.points >= 0
+        && isNumeric(data.exactScores) && data.exactScores >= 0
+        && isNumeric(data.correctOutcomes) && data.correctOutcomes >= 0;
+    }
+
+    // Prediction validation
+    function isValidPrediction(data) {
+      return data.matchId is string && data.matchId.size() <= 128
+        && isNumeric(data.predictedA) && data.predictedA >= 0 && data.predictedA <= 99
+        && isNumeric(data.predictedB) && data.predictedB >= 0 && data.predictedB <= 99
+        && isNumeric(data.pointsEarned) && data.pointsEarned >= 0
+        && data.exact is bool
+        && data.outcomeCorrect is bool
+        && (!('updatedAt' in data) || (data.updatedAt is string && data.updatedAt.size() <= 100));
+    }
+
+    // Match deadline confirmation
+    function isBeforeMatchStart(matchId) {
+      let matchPath = /databases/$(database)/documents/matches/$(matchId);
+      return !exists(matchPath) 
+        || !('status' in get(matchPath).data)
+        || get(matchPath).data.status == 'scheduled';
+    }
+
+    // Notification validation
+    function isValidNotification(data) {
+      return (!('id' in data) || (data.id is string && data.id.size() <= 128))
+        && data.title is string && data.title.size() <= 150
+        && data.body is string && data.body.size() <= 1000
+        && data.type is string && (data.type == 'alert' || data.type == 'match_reminder' || data.type == 'ranking_update');
+    }
+
+    // Report validation
+    function isValidReport(data) {
+      return (!('id' in data) || (data.id is string && data.id.size() <= 128))
+        && data.reporterId is string && data.reporterId.size() <= 128
+        && data.reporterName is string && data.reporterName.size() <= 100
+        && data.content is string && data.content.size() <= 2000
+        && data.status is string && (data.status == 'pending' || data.status == 'resolved');
+    }
+
+    // --- Path match blocks ---
+
+    // USERS COLLECTION
+    match /users/{userId} {
+      allow get: if isSignedIn();
+      allow list: if isSignedIn();
+      
+      // A user can create their own profile document with standard defaults. Standard users cannot set their role to 'admin', nor can they increment points.
+      allow create: if isOwner(userId) && isValidUser(incoming()) 
+        && (incoming().role == 'user' || (incoming().role == 'admin' && (incoming().email == 'ignaciozamorano@gmail.com' || ('email' in request.auth.token && request.auth.token.email == 'ignaciozamorano@gmail.com'))))
+        && incoming().globalPoints == 0 
+        && incoming().globalExactScores == 0 
+        && incoming().globalCorrectOutcomes == 0;
+        
+      // A user can change their displayName/photoURL, but cannot modify points, stats, credentials, or role.
+      // Admin is allowed to update fields for grading stats.
+      allow update: if (isOwner(userId) && isValidUser(incoming())
+        && incoming().role == existing().role
+        && incoming().globalPoints == existing().globalPoints
+        && incoming().globalExactScores == existing().globalExactScores
+        && incoming().globalCorrectOutcomes == existing().globalCorrectOutcomes
+        && incoming().email == existing().email)
+        || isAdmin();
+        
+      allow delete: if isAdmin();
+    }
+
+    // MATCHES COLLECTION
+    match /matches/{matchId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // GROUPS COLLECTION
+    match /groups/{groupId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isValidGroup(incoming()) && incoming().creatorId == request.auth.uid;
+      allow update: if (isSignedIn() && (resource.data.creatorId == request.auth.uid || isAdmin()) && isValidGroup(incoming())
+        && incoming().creatorId == existing().creatorId
+        && incoming().code == existing().code)
+        || isAdmin();
+      allow delete: if (isSignedIn() && resource.data.creatorId == request.auth.uid) || isAdmin();
+    }
+
+    // GROUP MEMBERS SUB-COLLECTION
+    match /groups/{groupId}/members/{userId} {
+      allow read: if isSignedIn();
+      
+      allow create: if isOwner(userId) && isValidGroupMember(incoming())
+        && incoming().points == get(/databases/$(database)/documents/users/$(userId)).data.globalPoints
+        && incoming().exactScores == get(/databases/$(database)/documents/users/$(userId)).data.globalExactScores
+        && incoming().correctOutcomes == get(/databases/$(database)/documents/users/$(userId)).data.globalCorrectOutcomes;
+
+      allow update: if (isOwner(userId) && isValidGroupMember(incoming())
+        && incoming().points == existing().points
+        && incoming().exactScores == existing().exactScores
+        && incoming().correctOutcomes == existing().correctOutcomes)
+        || isAdmin();
+
+      allow delete: if isOwner(userId) || isAdmin();
+    }
+
+    // PREDICTIONS SUB-COLLECTION
+    match /users/{userId}/predictions/{matchId} {
+      allow read: if isSignedIn();
+      
+      allow create: if isOwner(userId) && isValidPrediction(incoming())
+        && isBeforeMatchStart(matchId)
+        && incoming().pointsEarned == 0
+        && incoming().exact == false
+        && incoming().outcomeCorrect == false;
+
+      allow update: if (isOwner(userId) && isValidPrediction(incoming())
+        && isIncomingPredictionSameGrade(incoming(), existing())
+        && isBeforeMatchStart(matchId))
+        || isAdmin();
+
+      allow delete: if (isOwner(userId) && isBeforeMatchStart(matchId)) || isAdmin();
+    }
+
+    // Helper for prediction grading immutability
+    function isIncomingPredictionSameGrade(incoming, existing) {
+      return incoming.pointsEarned == existing.pointsEarned
+        && incoming.exact == existing.exact
+        && incoming.outcomeCorrect == existing.outcomeCorrect;
+    }
+
+    // NOTIFICATIONS COLLECTION
+    match /notifications/{notificationId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // REPORTS COLLECTION
+    match /reports/{reportId} {
+      allow create: if isSignedIn() && isValidReport(incoming()) && incoming().reporterId == request.auth.uid && incoming().status == 'pending';
+      allow read: if isSignedIn();
+      allow update: if (isSignedIn() && isValidReport(incoming()) && incoming().reporterId == existing().reporterId && incoming().content == existing().content) || isAdmin();
+      allow delete: if isAdmin();
+    }
+  }
+}

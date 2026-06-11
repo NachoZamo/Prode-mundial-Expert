@@ -1,0 +1,140 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Public and private user profile information, including statistics and scores.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "displayName": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "email": { "type": "string" },
+        "globalPoints": { "type": "integer" },
+        "globalExactScores": { "type": "integer" },
+        "globalCorrectOutcomes": { "type": "integer" },
+        "role": { "type": "string", "enum": ["user", "admin"] }
+      },
+      "required": ["id", "displayName", "photoURL", "email", "globalPoints", "globalExactScores", "globalCorrectOutcomes", "role"]
+    },
+    "Match": {
+      "title": "Match",
+      "description": "World Cup match details, stadium, date, results and status.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "teamA": { "type": "string" },
+        "teamB": { "type": "string" },
+        "teamAFlag": { "type": "string" },
+        "teamBFlag": { "type": "string" },
+        "group": { "type": "string" },
+        "stadium": { "type": "string" },
+        "date": { "type": "string", "format": "date-time" },
+        "resultA": { "type": ["integer", "null"] },
+        "resultB": { "type": ["integer", "null"] },
+        "status": { "type": "string", "enum": ["scheduled", "live", "finished"] }
+      },
+      "required": ["id", "teamA", "teamB", "teamAFlag", "teamBFlag", "group", "stadium", "date", "status"]
+    },
+    "Group": {
+      "title": "Group",
+      "description": "A private prediction group formed by users to compete with friends.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "code": { "type": "string" },
+        "creatorId": { "type": "string" },
+        "creatorName": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "name", "code", "creatorId", "creatorName", "createdAt"]
+    },
+    "GroupMember": {
+      "title": "Group Member",
+      "description": "Participant of a specific private group with cached point stats.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "displayName": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "points": { "type": "integer" },
+        "exactScores": { "type": "integer" },
+        "correctOutcomes": { "type": "integer" },
+        "joinedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "displayName", "photoURL", "points", "exactScores", "correctOutcomes", "joinedAt"]
+    },
+    "Prediction": {
+      "title": "Prediction",
+      "description": "A user's predicted score for a specific match, along with points awarded.",
+      "type": "object",
+      "properties": {
+        "matchId": { "type": "string" },
+        "predictedA": { "type": "integer" },
+        "predictedB": { "type": "integer" },
+        "pointsEarned": { "type": "integer" },
+        "exact": { "type": "boolean" },
+        "outcomeCorrect": { "type": "boolean" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["matchId", "predictedA", "predictedB", "pointsEarned", "exact", "outcomeCorrect", "updatedAt"]
+    },
+    "Notification": {
+      "title": "Notification",
+      "description": "Global or group-specific real-time pushes/alerts.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "body": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "type": { "type": "string", "enum": ["alert", "match_reminder", "ranking_update"] }
+      },
+      "required": ["id", "title", "body", "createdAt", "type"]
+    },
+    "Report": {
+      "title": "Report",
+      "description": "A support message, bug report, or user flag submitted for admin action.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "reporterId": { "type": "string" },
+        "reporterName": { "type": "string" },
+        "content": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "status": { "type": "string", "enum": ["pending", "resolved"] }
+      },
+      "required": ["id", "reporterId", "reporterName", "content", "createdAt", "status"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "Users profile data and lifetime prediction stats."
+    },
+    "/matches/{matchId}": {
+      "schema": { "$ref": "#/entities/Match" },
+      "description": "World Cup matches."
+    },
+    "/groups/{groupId}": {
+      "schema": { "$ref": "#/entities/Group" },
+      "description": "Private groups."
+    },
+    "/groups/{groupId}/members/{userId}": {
+      "schema": { "$ref": "#/entities/GroupMember" },
+      "description": "Members of a specific private group."
+    },
+    "/users/{userId}/predictions/{matchId}": {
+      "schema": { "$ref": "#/entities/Prediction" },
+      "description": "User predictions for matches."
+    },
+    "/notifications/{notificationId}": {
+      "schema": { "$ref": "#/entities/Notification" },
+      "description": "Global notification messages for breaking news or match reminders."
+    },
+    "/reports/{reportId}": {
+      "schema": { "$ref": "#/entities/Report" },
+      "description": "Bug / Abuse reports submitted by users."
+    }
+  }
+}

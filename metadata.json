@@ -1,0 +1,6 @@
+{
+  "name": "Mundial 2026 - Prode de Amigos",
+  "description": "App móvil para participar del mundial de fútbol 2026. Regístrate con Google, crea tus grupos privados con códigos de invitación, haz tus predicciones de partidos en tiempo real y compite en ránkings privados y globales.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

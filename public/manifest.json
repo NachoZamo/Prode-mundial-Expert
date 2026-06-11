@@ -1,0 +1,25 @@
+{
+  "name": "Mundial Fixture & Pronósticos",
+  "short_name": "Mundial ARG",
+  "description": "Cronograma de partidos ajustados para Argentina con simulador y pronósticos en tiempo real.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#10b981",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/app_icon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/app_icon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "categories": ["sports", "entertainment", "utilities"]
+}
